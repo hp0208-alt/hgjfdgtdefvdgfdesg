@@ -79,7 +79,7 @@
       border-radius: 12px;
       box-shadow: 0 4px 15px rgba(0,0,0,0.08);
       padding: 24px;
-      display: none; /* 預設隱藏，解鎖後顯示 */
+      display: none;
     }
     .header {
       display: flex;
@@ -103,13 +103,14 @@
     }
     .btn-group {
       display: flex;
+      flex-wrap: wrap;
       gap: 8px;
     }
     button {
       background-color: #e74c3c;
       color: white;
       border: none;
-      padding: 10px 16px;
+      padding: 10px 14px;
       border-radius: 6px;
       font-size: 14px;
       font-weight: bold;
@@ -119,11 +120,23 @@
     button:hover {
       background-color: #c0392b;
     }
+    button.sync-btn {
+      background-color: #27ae60;
+    }
+    button.sync-btn:hover {
+      background-color: #219150;
+    }
     button.lock-btn {
       background-color: #34495e;
     }
     button.lock-btn:hover {
       background-color: #2c3e50;
+    }
+    #syncStatus {
+      font-size: 14px;
+      font-weight: bold;
+      margin-bottom: 12px;
+      min-height: 20px;
     }
     .progress-box {
       background: #ecf0f1;
@@ -236,10 +249,13 @@
       <p>作息基準：07:15 上學 / 15:55 放學 / 16:30 補習（已針對理化與社會三科加權）</p>
     </div>
     <div class="btn-group">
+      <button class="sync-btn" onclick="syncToGoogleScript()">☁️ 同步至 Google 試算表</button>
       <button class="lock-btn" onclick="lockPage()">🔒 鎖定</button>
       <button onclick="resetChecks()">重置本週進度</button>
     </div>
   </div>
+
+  <div id="syncStatus"></div>
 
   <div class="progress-box">
     <strong>本週自主讀書完成度：</strong>
@@ -309,9 +325,9 @@
 </div>
 
 <script>
-  // ▼▼▼ 你可以在這裡修改你的專屬密碼 ▼▼▼
+  // ▼ 專屬密碼與 Google Apps Script 網址設定 ▼
   const MY_PASSWORD = "2026";
-  // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbz9ZMLC-XFMCpcie8_GyYIud2Xma7hsHpNaI_u3OjjPJjviKWEegVYKscEUxiKJ-G2_8g/exec";
 
   function checkAuth() {
     if (sessionStorage.getItem("isUnlocked") === "true") {
@@ -448,7 +464,45 @@
     }
   }
 
-  // 啟動時先檢查密碼狀態
+  // 傳送課表與目前打勾進度至你的 Google Apps Script
+  function syncToGoogleScript() {
+    const statusEl = document.getElementById("syncStatus");
+    statusEl.style.color = "#e67e22";
+    statusEl.textContent = "⏳ 正在連線至 Google Apps Script 同步資料...";
+
+    const savedChecks = JSON.parse(localStorage.getItem("studyChecks_v1") || "{}");
+    const exportRows = scheduleData.map((row, rIdx) => {
+      return row.map((cell, cIdx) => {
+        if (cIdx >= 2 && cIdx <= 6 && studyRows.includes(rIdx)) {
+          const isDone = savedChecks[`task_${rIdx}_${cIdx}`];
+          return (isDone ? "[已完成] " : "[未完成] ") + cell;
+        }
+        return cell;
+      });
+    });
+
+    fetch(GAS_URL, {
+      method: "POST",
+      mode: "no-cors",
+      headers: {
+        "Content-Type": "text/plain;charset=utf-8"
+      },
+      body: JSON.stringify({
+        action: "syncSchedule",
+        updatedAt: new Date().toLocaleString("zh-TW"),
+        scheduleData: exportRows
+      })
+    })
+    .then(() => {
+      statusEl.style.color = "#27ae60";
+      statusEl.textContent = "✅ 已傳送至你的 Google Apps Script！（若試算表未更新，請確認 GAS 內有設定 doPost 接收函式）";
+    })
+    .catch(err => {
+      statusEl.style.color = "#e74c3c";
+      statusEl.textContent = "❌ 同步失敗：" + err.message;
+    });
+  }
+
   checkAuth();
 </script>
 
